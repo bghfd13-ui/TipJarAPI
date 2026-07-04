@@ -6,62 +6,16 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
+// ================= ROOT =================
 app.get("/", (req, res) => {
-    res.send("TipJar API v2 online");
+    res.send("TipJar API (legacy compatible) online");
 });
 
 
-// ===== GAMEPASSES =====
-app.get("/gamepasses/:userId", async (req, res) => {
+// ================= PRODUCT INFO =================
+app.get("/api/marketplace/productinfo", async (req, res) => {
     try {
-        const { userId } = req.params;
-
-        const response = await axios.get(
-            `https://www.pekora.zip/api/games/v1/users/${userId}/game-passes`
-        );
-
-        const passes = (response.data.data || []).map(p => ({
-            id: p.id,
-            name: p.name,
-            price: p.price || 0
-        }));
-
-        res.json(passes);
-    } catch (e) {
-        console.log(e.message);
-        res.json([]);
-    }
-});
-
-
-// ===== ITEMS (CLOTHING) =====
-app.get("/items/:userId", async (req, res) => {
-    try {
-        const { userId } = req.params;
-
-        const response = await axios.get(
-            `https://www.pekora.zip/api/catalog/items?creatorTargetId=${userId}&limit=50`
-        );
-
-        const items = (response.data.data || []).map(item => ({
-            id: item.id,
-            name: item.name,
-            price: item.price || 0,
-            assetType: item.assetType
-        }));
-
-        res.json(items);
-    } catch (e) {
-        console.log(e.message);
-        res.json([]);
-    }
-});
-
-
-// ===== PRODUCT INFO =====
-app.get("/product/:assetId", async (req, res) => {
-    try {
-        const { assetId } = req.params;
+        const assetId = req.query.assetId;
 
         const response = await axios.get(
             `https://www.pekora.zip/api/marketplace/productinfo?assetId=${assetId}`
@@ -69,19 +23,82 @@ app.get("/product/:assetId", async (req, res) => {
 
         res.json(response.data);
     } catch (e) {
-        console.log(e.message);
+        res.status(500).json({});
+    }
+});
+
+
+// ================= CATALOG ITEMS =================
+app.get("/api/catalog/v1/search/items", async (req, res) => {
+    try {
+        const { creatorTargetId, category, limit } = req.query;
+
+        const url =
+            `https://www.pekora.zip/api/catalog/items` +
+            `?creatorType=User&creatorTargetId=${creatorTargetId}` +
+            `&category=${category || "Clothing"}` +
+            `&limit=${limit || 25}`;
+
+        const response = await axios.get(url);
+
+        res.json(response.data);
+    } catch (e) {
+        res.json({ data: [] });
+    }
+});
+
+
+// ================= GAMEPASSES =================
+app.get("/api/games/v1/games/:gameId/game-passes", async (req, res) => {
+    try {
+        const { gameId } = req.params;
+
+        const response = await axios.get(
+            `https://www.pekora.zip/api/games/v1/games/${gameId}/game-passes?limit=100`
+        );
+
+        res.json(response.data);
+    } catch (e) {
+        res.json({ data: [] });
+    }
+});
+
+
+// ================= USERS =================
+app.get("/api/users/v1/users/:userId", async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        const response = await axios.get(
+            `https://www.pekora.zip/api/users/v1/users/${userId}`
+        );
+
+        res.json(response.data);
+    } catch (e) {
         res.json({});
     }
 });
 
 
-// ===== AVATAR =====
-app.get("/avatar/:userId", async (req, res) => {
-    const url = `https://www.roblox.com/headshot-thumbnail/image?userId=${req.params.userId}&width=420&height=420&format=png`;
-    res.json({ url });
+// ================= AVATAR =================
+app.get("/api/thumbnails/v1/users/avatar", (req, res) => {
+    const userIds = req.query.userIds;
+
+    const url =
+        `https://www.roblox.com/headshot-thumbnail/image?userId=${userIds}` +
+        `&width=420&height=420&format=png`;
+
+    res.json({
+        data: [
+            {
+                imageUrl: url
+            }
+        ]
+    });
 });
 
 
+// ================= START =================
 app.listen(PORT, () => {
-    console.log("TipJar API v2 running on port", PORT);
+    console.log("Legacy TipJar API running on port", PORT);
 });
