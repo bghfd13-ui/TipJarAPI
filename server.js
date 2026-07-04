@@ -4,138 +4,124 @@ const cors = require("cors");
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
 app.get("/", (req, res) => {
-    res.send("TipJar API v2 running");
+  res.send("TipJar API v2 running");
 });
 
 
-// ============================
-// 1. GAMEPASSES (как у тебя было)
-// ============================
-app.get("/passes/:userId", async (req, res) => {
-    const userId = req.params.userId;
-
-    try {
-        const response = await axios.get(
-            `https://www.pekora.zip/api/catalog/items?category=0&limit=100&sortType=0&creatorTargetId=${userId}`
-        );
-
-        let passes = [];
-
-        for (const item of response.data.data || []) {
-            if (item.assetType == 34) {
-                passes.push({
-                    id: item.id,
-                    name: item.name,
-                    price: item.price
-                });
-            }
-        }
-
-        res.json(passes);
-
-    } catch (err) {
-        console.log("passes error:", err.message);
-        res.json([]);
-    }
+// ===============================
+// HEALTH
+// ===============================
+app.get("/health", (req, res) => {
+  res.json({ ok: true, status: "alive" });
 });
 
 
-// ============================
-// 2. MARKETPLACE PRODUCT INFO (ВАЖНО)
-// ============================
+// ===============================
+// MARKETPLACE PRODUCT INFO
+// ===============================
 app.get("/api/marketplace/productinfo", async (req, res) => {
-    const assetId = req.query.assetId;
+  const assetId = req.query.assetId;
 
-    if (!assetId) return res.status(400).json({ error: "missing assetId" });
+  if (!assetId) {
+    return res.status(400).json({ error: "missing assetId" });
+  }
 
-    try {
-        const response = await axios.get(
-            `https://www.pekora.zip/apisite/api/marketplace/productinfo?assetId=${assetId}`
-        );
+  try {
+    const url = `https://www.pekora.zip/api/marketplace/productinfo?assetId=${assetId}`;
 
-        res.json(response.data);
+    const response = await axios.get(url, {
+      timeout: 8000,
+      headers: {
+        "User-Agent": "Mozilla/5.0"
+      }
+    });
 
-    } catch (err) {
-        console.log("productinfo error:", err.message);
-        res.status(500).json({});
-    }
+    return res.json(response.data);
+
+  } catch (err) {
+    console.log("productinfo error:", err.message);
+
+    return res.json({
+      AssetId: Number(assetId),
+      Name: "Unknown",
+      PriceInRobux: 0,
+      AssetTypeId: 0,
+      IsForSale: false
+    });
+  }
 });
 
 
-// ============================
-// 3. CATALOG SEARCH (ОЧЕНЬ ВАЖНО)
-// ============================
+// ===============================
+// CATALOG (CLOTHING / TSHIRTS)
+// ===============================
 app.get("/catalog/v1/search/items", async (req, res) => {
-    try {
-        const { creatorType, creatorTargetId, category, limit } = req.query;
+  const { creatorTargetId, category } = req.query;
 
-        const url =
-            `https://www.pekora.zip/apisite/catalog/v1/search/items` +
-            `?creatorType=${creatorType}&creatorTargetId=${creatorTargetId}` +
-            `&category=${category}&limit=${limit}`;
+  if (!creatorTargetId) {
+    return res.status(400).json({ error: "missing creatorTargetId" });
+  }
 
-        const response = await axios.get(url);
+  try {
+    const url = `https://www.pekora.zip/api/catalog/v1/search/items` +
+      `?creatorType=User&creatorTargetId=${creatorTargetId}` +
+      `&category=${category || "Clothing"}&limit=25`;
 
-        res.json(response.data);
+    const response = await axios.get(url, { timeout: 8000 });
 
-    } catch (err) {
-        console.log("catalog error:", err.message);
-        res.status(500).json({ data: [] });
-    }
+    return res.json(response.data);
+
+  } catch (err) {
+    console.log("catalog error:", err.message);
+
+    return res.json({ data: [] });
+  }
 });
 
 
-// ============================
-// 4. GAMEPASSES LIST (игры)
-// ============================
+// ===============================
+// GAMEPASSES
+// ===============================
 app.get("/games/v1/games/:gameId/game-passes", async (req, res) => {
-    const gameId = req.params.gameId;
+  const gameId = req.params.gameId;
 
-    try {
-        const response = await axios.get(
-            `https://www.pekora.zip/apisite/games/v1/games/${gameId}/game-passes?limit=100&sortOrder=Asc`
-        );
+  try {
+    const url = `https://www.pekora.zip/api/games/v1/games/${gameId}/game-passes?limit=100`;
 
-        res.json(response.data);
+    const response = await axios.get(url, { timeout: 8000 });
 
-    } catch (err) {
-        console.log("gamepasses error:", err.message);
-        res.status(500).json({ data: [] });
-    }
+    return res.json(response.data);
+
+  } catch (err) {
+    console.log("gamepasses error:", err.message);
+
+    return res.json({ data: [] });
+  }
 });
 
 
-// ============================
-// 5. AVATAR THUMBNAIL
-// ============================
-app.get("/thumbnails/v1/users/avatar", async (req, res) => {
-    const userIds = req.query.userIds;
+// ===============================
+// USERS (display name fallback)
+// ===============================
+app.get("/users/v1/users/:id", async (req, res) => {
+  const id = req.params.id;
 
-    try {
-        const response = await axios.get(
-            `https://www.pekora.zip/apisite/thumbnails/v1/users/avatar?userIds=${userIds}&size=420x420&format=png`
-        );
-
-        res.json(response.data);
-
-    } catch (err) {
-        console.log("avatar error:", err.message);
-
-        // fallback (чтобы не ломалось)
-        res.json({
-            data: [{
-                imageUrl: `https://www.roblox.com/headshot-thumbnail/image?userId=${userIds}&width=150&height=150&format=png`
-            }]
-        });
-    }
+  return res.json({
+    id,
+    displayName: "Player",
+    name: "Player"
+  });
 });
 
 
-// ============================
-app.listen(PORT, () => {
-    console.log("TipJar API v2 running on port", PORT);
+// ===============================
+// START SERVER (IMPORTANT FOR RENDER)
+// ===============================
+app.listen(PORT, "0.0.0.0", () => {
+  console.log("TipJar API running on port", PORT);
 });
