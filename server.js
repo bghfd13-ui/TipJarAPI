@@ -1,127 +1,123 @@
 const express = require("express");
 const axios = require("axios");
-const cors = require("cors");
-
 const app = express();
-app.use(cors());
+
 app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
+// ======================
+// HEALTH CHECK
+// ======================
 app.get("/", (req, res) => {
-  res.send("TipJar API v2 running");
+  res.json({ ok: true, status: "TipJar API running" });
 });
 
-
-// ===============================
-// HEALTH
-// ===============================
-app.get("/health", (req, res) => {
-  res.json({ ok: true, status: "alive" });
-});
-
-
-// ===============================
-// MARKETPLACE PRODUCT INFO
-// ===============================
-app.get("/api/marketplace/productinfo", async (req, res) => {
-  const assetId = req.query.assetId;
-
-  if (!assetId) {
-    return res.status(400).json({ error: "missing assetId" });
-  }
-
+// ======================
+// PRODUCT INFO (proxy)
+// ======================
+app.get("/productinfo", async (req, res) => {
   try {
-    const url = `https://www.pekora.zip/api/marketplace/productinfo?assetId=${assetId}`;
+    const { assetId } = req.query;
 
-    const response = await axios.get(url, {
-      timeout: 8000,
-      headers: {
-        "User-Agent": "Mozilla/5.0"
-      }
+    const url = `https://www.roblox.com/api/catalog/v1/catalog/items/details?itemIds=${assetId}`;
+
+    const r = await axios.get(url);
+    const item = r.data?.data?.[0];
+
+    if (!item) return res.status(404).json({ error: "not found" });
+
+    res.json({
+      AssetId: item.id,
+      Name: item.name,
+      PriceInRobux: item.price,
+      AssetTypeId: item.assetType,
+      IsForSale: item.isForSale
     });
 
-    return res.json(response.data);
-
-  } catch (err) {
-    console.log("productinfo error:", err.message);
-
-    return res.json({
-      AssetId: Number(assetId),
-      Name: "Unknown",
-      PriceInRobux: 0,
-      AssetTypeId: 0,
-      IsForSale: false
-    });
+  } catch (e) {
+    console.error("productinfo error:", e.message);
+    res.status(500).json({ error: "productinfo failed" });
   }
 });
 
-
-// ===============================
-// CATALOG (CLOTHING / TSHIRTS)
-// ===============================
-app.get("/catalog/v1/search/items", async (req, res) => {
-  const { creatorTargetId, category } = req.query;
-
-  if (!creatorTargetId) {
-    return res.status(400).json({ error: "missing creatorTargetId" });
-  }
-
+// ======================
+// CATALOG (clothing)
+// ======================
+app.get("/catalog", async (req, res) => {
   try {
-    const url = `https://www.pekora.zip/api/catalog/v1/search/items` +
-      `?creatorType=User&creatorTargetId=${creatorTargetId}` +
-      `&category=${category || "Clothing"}&limit=25`;
+    const { userId, category } = req.query;
 
-    const response = await axios.get(url, { timeout: 8000 });
+    const url = `https://catalog.roblox.com/v1/search/items/details?Category=${category}&CreatorTargetId=${userId}&CreatorType=User&Limit=25`;
 
-    return res.json(response.data);
+    const r = await axios.get(url);
 
-  } catch (err) {
-    console.log("catalog error:", err.message);
+    res.json({ data: r.data?.data || [] });
 
-    return res.json({ data: [] });
+  } catch (e) {
+    console.error("catalog error:", e.message);
+    res.status(500).json({ error: "catalog failed" });
   }
 });
 
-
-// ===============================
+// ======================
 // GAMEPASSES
-// ===============================
-app.get("/games/v1/games/:gameId/game-passes", async (req, res) => {
-  const gameId = req.params.gameId;
-
+// ======================
+app.get("/gamepasses", async (req, res) => {
   try {
-    const url = `https://www.pekora.zip/api/games/v1/games/${gameId}/game-passes?limit=100`;
+    const { gameId } = req.query;
 
-    const response = await axios.get(url, { timeout: 8000 });
+    const url = `https://games.roblox.com/v1/games/${gameId}/game-passes?limit=100&sortOrder=Asc`;
 
-    return res.json(response.data);
+    const r = await axios.get(url);
 
-  } catch (err) {
-    console.log("gamepasses error:", err.message);
+    res.json({ data: r.data?.data || [] });
 
-    return res.json({ data: [] });
+  } catch (e) {
+    console.error("gamepasses error:", e.message);
+    res.status(500).json({ error: "gamepasses failed" });
   }
 });
 
+// ======================
+// USER INFO
+// ======================
+app.get("/user", async (req, res) => {
+  try {
+    const { userId } = req.query;
 
-// ===============================
-// USERS (display name fallback)
-// ===============================
-app.get("/users/v1/users/:id", async (req, res) => {
-  const id = req.params.id;
+    const url = `https://users.roblox.com/v1/users/${userId}`;
 
-  return res.json({
-    id,
-    displayName: "Player",
-    name: "Player"
-  });
+    const r = await axios.get(url);
+
+    res.json(r.data);
+
+  } catch (e) {
+    res.status(500).json({ error: "user failed" });
+  }
 });
 
+// ======================
+// AVATAR THUMBNAIL
+// ======================
+app.get("/avatar", async (req, res) => {
+  try {
+    const { userId } = req.query;
 
-// ===============================
-// START SERVER (IMPORTANT FOR RENDER)
-// ===============================
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("TipJar API running on port", PORT);
+    const url = `https://thumbnails.roblox.com/v1/users/avatar?userIds=${userId}&size=420x420&format=Png`;
+
+    const r = await axios.get(url);
+
+    res.json({
+      imageUrl: r.data?.data?.[0]?.imageUrl
+    });
+
+  } catch (e) {
+    res.status(500).json({ error: "avatar failed" });
+  }
+});
+
+// ======================
+app.listen(PORT, () => {
+  console.log("API running on port", PORT);
 });
