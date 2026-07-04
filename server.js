@@ -1,75 +1,70 @@
 const express = require("express");
 const axios = require("axios");
-const app = express();
 
+const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
-// ================= HEALTH =================
 app.get("/", (req, res) => {
-  res.json({ ok: true, service: "TipJar API v2" });
+  res.json({ ok: true, service: "Donate API v3" });
 });
 
 // ================= GAMEPASSES =================
 app.get("/gamepasses", async (req, res) => {
   try {
     const { gameId } = req.query;
-
     if (!gameId) return res.status(400).json({ error: "missing gameId" });
 
-    const url = `https://games.roblox.com/v1/games/${gameId}/game-passes?limit=100&sortOrder=Asc`;
+    const r = await axios.get(
+      `https://games.roblox.com/v1/games/${gameId}/game-passes?limit=100&sortOrder=Asc`
+    );
 
-    const r = await axios.get(url);
-
-    const data = (r.data?.data || []).map(p => ({
-      id: p.id,
-      name: p.name,
-      price: p.price || 0,
-      assetType: "Gamepass"
-    }));
-
-    res.json({ data });
+    res.json({
+      data: (r.data?.data || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        price: p.price || 0,
+        assetType: "Gamepass"
+      }))
+    });
 
   } catch (e) {
-    console.error("gamepasses error:", e.message);
     res.status(500).json({ error: "gamepasses failed" });
   }
 });
 
-// ================= CATALOG (CLOTHING FIXED) =================
+// ================= CATALOG =================
 app.get("/catalog", async (req, res) => {
   try {
     const { userId, category } = req.query;
-
     if (!userId || !category) {
       return res.status(400).json({ error: "missing params" });
     }
 
-    // FIXED Roblox endpoint (stable)
-    const url = `https://catalog.roblox.com/v1/search/items/details`;
-
-    const r = await axios.get(url, {
-      params: {
-        Category: category,
-        CreatorTargetId: userId,
-        CreatorType: "User",
-        Limit: 30
+    const r = await axios.get(
+      `https://catalog.roblox.com/v1/search/items/details`,
+      {
+        params: {
+          CreatorTargetId: userId,
+          CreatorType: "User",
+          Limit: 30,
+          Category: category
+        }
       }
+    );
+
+    res.json({
+      data: (r.data?.data || []).map(i => ({
+        id: i.id,
+        name: i.name,
+        price: i.price || 0,
+        assetType: i.assetType || "Clothing",
+        isForSale: true
+      }))
     });
 
-    const items = (r.data?.data || []).map(i => ({
-      id: i.id,
-      name: i.name,
-      price: i.price || 0,
-      assetType: i.assetType || "Clothing",
-      isForSale: true
-    }));
-
-    res.json({ data: items });
-
   } catch (e) {
-    console.error("catalog error:", e.message);
     res.status(500).json({ error: "catalog failed" });
   }
 });
@@ -78,12 +73,11 @@ app.get("/catalog", async (req, res) => {
 app.get("/productinfo", async (req, res) => {
   try {
     const { assetId } = req.query;
-
     if (!assetId) return res.status(400).json({ error: "missing assetId" });
 
-    const url = `https://economy.roblox.com/v2/assets/${assetId}/details`;
-
-    const r = await axios.get(url);
+    const r = await axios.get(
+      `https://economy.roblox.com/v2/assets/${assetId}/details`
+    );
 
     res.json({
       AssetId: assetId,
@@ -94,7 +88,6 @@ app.get("/productinfo", async (req, res) => {
     });
 
   } catch (e) {
-    console.error("productinfo error:", e.message);
     res.status(500).json({ error: "productinfo failed" });
   }
 });
@@ -104,11 +97,13 @@ app.get("/user", async (req, res) => {
   try {
     const { userId } = req.query;
 
-    const r = await axios.get(`https://users.roblox.com/v1/users/${userId}`);
+    const r = await axios.get(
+      `https://users.roblox.com/v1/users/${userId}`
+    );
 
     res.json(r.data);
 
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: "user failed" });
   }
 });
@@ -126,11 +121,11 @@ app.get("/avatar", async (req, res) => {
       imageUrl: r.data?.data?.[0]?.imageUrl
     });
 
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: "avatar failed" });
   }
 });
 
 app.listen(PORT, () => {
-  console.log("TipJar API v2 running on", PORT);
+  console.log("Donate API v3 running on", PORT);
 });
